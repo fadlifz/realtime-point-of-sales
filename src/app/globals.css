@@ -76,6 +76,9 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-width: 16rem;
+  --sidebar-width-mobile: 18rem;
+  --sidebar-width-icon: 3rem;
 }
 
 .dark {
@@ -118,5 +121,44 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* 1. Paksa SidebarProvider untuk jadi Flexbox */
+  [data-slot="sidebar-wrapper"] {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100% !important;
+    min-height: 100vh !important;
+  }
+
+  /* 2. Paksa Inset (Konten) untuk bergeser ke kanan sejauh lebar Sidebar */
+  [data-slot="sidebar-inset"] {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 3. Hilangkan margin saat di mobile agar tidak bolong kirinya */
+  @media (max-width: 768px) {
+    [data-slot="sidebar-inset"] {
+      margin-left: 0 !important;
+    }
+  }
+
+  [data-slot="dropdown-menu-content"] {
+    display: flex !important;
+    flex-direction: column !important;
+    min-width: 14rem !important;
+    z-index: 50;
+  }
+
+  /* Memastikan item di dalamnya berbaris rapi */
+  [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-label"] {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    width: 100% !important;
   }
 }
