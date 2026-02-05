@@ -28,15 +28,12 @@ import {
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/actions/auth-action";
+import { useAuthStore } from "@/stores/auth-store";
 
 export default function AppSidebar() {
   const { isMobile } = useSidebar();
   const pathname = usePathname();
-  const profile = {
-    name: "Fadli Faturzaman",
-    role: "admin",
-    avatar_url: "",
-  };
+  const profile = useAuthStore((state) => state.profile);
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b pb-4">
@@ -94,17 +91,17 @@ export default function AppSidebar() {
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
                   <Avatar className="h-8 w-8 rounded-lg">
-                    <AvatarImage src="" />
+                    <AvatarImage src={profile.avatar_url} alt={profile.name} />
                     <AvatarFallback className="rounded-lg bg-teal-500 text-white">
-                      F
+                      {profile.name?.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">
-                      Fadli Faturzaman
+                      {profile.name}
                     </span>
                     <span className="truncate text-xs text-muted-foreground">
-                      Admin
+                      {profile.role}
                     </span>
                   </div>
                   <EllipsisVertical className="ml-auto size-4" />
@@ -122,16 +119,20 @@ export default function AppSidebar() {
                 <DropdownMenuLabel className="p-0 font-normal">
                   <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                     <Avatar className="h-8 w-8 rounded-lg">
+                      <AvatarImage
+                        src={profile.avatar_url}
+                        alt={profile.name}
+                      />
                       <AvatarFallback className="rounded-lg bg-teal-500 text-white">
-                        F
+                        {profile.name?.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="grid flex-1 text-left leading-tight">
                       <span className="truncate font-semibold">
-                        Fadli Faturzaman
+                        {profile.name}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">
-                        Admin
+                        {profile.role}
                       </span>
                     </div>
                   </div>
