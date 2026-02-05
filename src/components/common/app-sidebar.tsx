@@ -27,6 +27,7 @@ import {
 } from "@/constants/sidebar-constant";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
+import { signOut } from "@/actions/auth-action";
 
 export default function AppSidebar() {
   const { isMobile } = useSidebar();
@@ -138,7 +139,10 @@ export default function AppSidebar() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem className="flex items-center gap-2 cursor-pointer text-red-500 focus:bg-red-50 focus:text-red-600">
+                <DropdownMenuItem
+                  className="flex items-center gap-2 cursor-pointer text-red-500 focus:bg-red-50 focus:text-red-600"
+                  onClick={() => signOut()}
+                >
                   <LogOut className="size-4" />
                   <span>Log out</span>
                 </DropdownMenuItem>
