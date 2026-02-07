@@ -10,12 +10,32 @@ import useDataTable from "@/hooks/user-data-table";
 import { createClient } from "@/lib/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Pencil, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import DialogCreateUser from "./dialog-create-user";
 
 export default function UserManagement() {
   const supabase = createClient();
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data, error } = await supabase.auth.getUser();
+
+      if (error) {
+        console.error("Auth error:", error);
+        return;
+      }
+
+      if (data.user) {
+        console.log("✅ USER SUDAH LOGIN");
+        console.log(data.user);
+      } else {
+        console.log("❌ USER BELUM LOGIN");
+      }
+    };
+
+    checkAuth();
+  }, []);
+
   const {
     currentPage,
     currentLimit,
