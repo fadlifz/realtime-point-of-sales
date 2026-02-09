@@ -2,6 +2,7 @@
 
 import { environment } from "@/configs/environment";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export async function uploadFile(
   bucket: string,
@@ -45,19 +46,28 @@ export async function uploadFile(
 }
 
 export async function deleteFile(bucket: string, path: string) {
-  const supabase = await createClient();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 
-  const { error } = await supabase.storage.from(bucket).remove([path]);
+  const supabaseAdmin = createSupabaseClient(supabaseUrl, serviceKey);
+
+  // console.log("🚀 MENGIRIM PERINTAH HAPUS FILE");
+  // console.log("📍 Path:", path);
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(bucket)
+    .remove([path]);
+
   if (error) {
-    return {
-      status: "error",
-      errors: {
-        _form: [error.message],
-      },
-    };
+    // console.error("❌ ERROR STORAGE:", error.message);
+    return { status: "error", error };
   }
 
-  return {
-    status: "success",
-  };
+  if (data && data.length > 0) {
+    // console.log("✅ BERHASIL DIHAPUS:", data);
+    return { status: "success", data };
+  } else {
+    // console.log("⚠️ ZONK: Supabase gak nemu file di path itu.");
+    return { status: "error", message: "File not found" };
+  }
 }
