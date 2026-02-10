@@ -1,18 +1,12 @@
+import { INITIAL_STATE_UPDATE_USER } from "@/constants/auth-constant";
 import {
-  INITIAL_CREATE_USER_FORM,
-  INITIAL_STATE_CREATE_USER,
-  INITIAL_STATE_UPDATE_USER,
-} from "@/constants/auth-constant";
-import {
-  CreateUserForm,
-  createUserSchema,
   UpdateUserForm,
   updateUserSchema,
 } from "@/validations/auth-validation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { startTransition, useActionState, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { createUser, updateUser } from "../actions";
+import { updateUser } from "../actions";
 import { toast } from "sonner";
 import { Preview } from "@/types/general";
 import FormUser from "./form-user";
