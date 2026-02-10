@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Table } from "@/validations/table-validation";
 import { HEADER_TABLE_TABLE } from "@/constants/table-constant";
+import DialogCreateTable from "./dialog-create-table";
 
 export default function TableManagement() {
   const supabase = createClient();
@@ -25,7 +26,6 @@ export default function TableManagement() {
     handleChangeLimit,
     handleChangeSearch,
   } = useDataTable();
-
   const {
     data: tables,
     isLoading,
@@ -39,11 +39,9 @@ export default function TableManagement() {
         .range((currentPage - 1) * currentLimit, currentPage * currentLimit - 1)
         .order("created_at");
 
-      // FIX: Kita hanya search kolom bertipe teks saja (name & status)
-      // Kolom 'capacity' dilewati karena bertipe numeric dan tidak cocok dengan ilike
       if (currentSearch) {
         query.or(
-          `name.ilike.%${currentSearch}%,status.ilike.%${currentSearch}%`,
+          `name.ilike.%${currentSearch}%,capacity.ilike.%${currentSearch}%,status.ilike.%${currentSearch}%`,
         );
       }
 
@@ -73,20 +71,15 @@ export default function TableManagement() {
         currentLimit * (currentPage - 1) + index + 1,
         <div>
           <h4 className="font-bold">{table.name}</h4>
-          <p className="text-xs text-muted-foreground">
-            {table.description || "-"}
-          </p>
+          <p className="text-xs">{table.description}</p>
         </div>,
         table.capacity,
         <div
-          className={cn(
-            "px-2 py-1 rounded-full text-white w-fit text-xs capitalize",
-            {
-              "bg-green-600": table.status === "available",
-              "bg-red-600": table.status === "unavailable",
-              "bg-yellow-600": table.status === "reserved",
-            },
-          )}
+          className={cn("px-2 py-1 rounded-full text-white w-fit capitalize", {
+            "bg-green-600": table.status === "available",
+            "bg-red-600": table.status === "unavailable",
+            "bg-yellow-600": table.status === "reserved",
+          })}
         >
           {table.status}
         </div>,
@@ -94,8 +87,8 @@ export default function TableManagement() {
           menu={[
             {
               label: (
-                <span className="flex items-center gap-2">
-                  <Pencil size={16} />
+                <span className="flex item-center gap-2">
+                  <Pencil />
                   Edit
                 </span>
               ),
@@ -108,8 +101,8 @@ export default function TableManagement() {
             },
             {
               label: (
-                <span className="flex items-center gap-2">
-                  <Trash2 size={16} className="text-red-400" />
+                <span className="flex item-center gap-2">
+                  <Trash2 className="text-red-400" />
                   Delete
                 </span>
               ),
@@ -125,13 +118,13 @@ export default function TableManagement() {
         />,
       ];
     });
-  }, [tables, currentLimit, currentPage]);
+  }, [tables]);
 
   const totalPages = useMemo(() => {
     return tables && tables.count !== null
       ? Math.ceil(tables.count / currentLimit)
       : 0;
-  }, [tables, currentLimit]);
+  }, [tables]);
 
   return (
     <div className="w-full">
@@ -139,14 +132,14 @@ export default function TableManagement() {
         <h1 className="text-2xl font-bold">Table Management</h1>
         <div className="flex gap-2">
           <Input
-            placeholder="Search by name or status..."
-            className="max-w-sm"
+            placeholder="Search by name, capacity and status"
             onChange={(e) => handleChangeSearch(e.target.value)}
           />
           <Dialog>
             <DialogTrigger asChild>
-              <Button>Create Table</Button>
+              <Button variant="outline">Create</Button>
             </DialogTrigger>
+            <DialogCreateTable refetch={refetch} />
           </Dialog>
         </div>
       </div>
