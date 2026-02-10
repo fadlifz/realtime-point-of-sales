@@ -6,12 +6,13 @@ import { menuSchema } from "@/validations/menu-validation";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { AuthFormState } from "@/types/auth";
 
 export async function createMenu(
   prevState: MenuFormState,
   formData: FormData,
 ): Promise<MenuFormState> {
-  console.log("--- 🚀 START CREATE MENU ---");
+  //   console.log("--- 🚀 START CREATE MENU ---");
 
   // 1. Validasi Input
   const validatedFields = menuSchema.safeParse({
@@ -54,14 +55,17 @@ export async function createMenu(
     }
 
     finalImageUrl = data.url;
-    console.log("✅ File uploaded successfully:", finalImageUrl);
+    // console.log("✅ File uploaded successfully:", finalImageUrl);
   }
 
   // 3. Inisialisasi Admin Client (Bypass RLS)
-  // Ini solusinya biar gak kena 'New row violates RLS'
-  const supabaseAdmin = createSupabaseAdmin();
+  const supabaseAdmin = createSupabaseAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
 
-  console.log("📡 Inserting data to table 'menus'...");
+  //   console.log("📡 Inserting data to table 'menus'...");
 
   const payload = {
     name: validatedFields.data.name,
@@ -73,7 +77,7 @@ export async function createMenu(
     is_available: validatedFields.data.is_available,
   };
 
-  console.log("📦 Payload:", payload);
+  //   console.log("📦 Payload:", payload);
 
   const { data: insertedData, error } = await supabaseAdmin
     .from("menus")
@@ -143,7 +147,11 @@ export async function updateMenu(
     finalImageUrl = data.url;
   }
 
-  const supabaseAdmin = createSupabaseAdmin();
+  const supabaseAdmin = createSupabaseAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
 
   const { error } = await supabaseAdmin
     .from("menus")
@@ -167,4 +175,37 @@ export async function updateMenu(
 
   revalidatePath("/admin/menu");
   return { status: "success" };
+}
+
+export async function deleteMenu(
+  prevState: AuthFormState | null,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const id = formData.get("id") as string;
+  const image = formData.get("image_url") as string;
+
+  const supabaseAdmin = createSupabaseAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  try {
+    if (image && image.includes("/images/")) {
+      const pathFile = image.split("/public/images/")[1]?.split("?")[0];
+      if (pathFile) await deleteFile("images", decodeURIComponent(pathFile));
+    }
+
+    const { error } = await supabaseAdmin.from("menus").delete().eq("id", id);
+
+    if (error) {
+      return { status: "error", errors: { _form: [error.message] } };
+    }
+
+    revalidatePath("/admin/menu");
+    return { status: "success" };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Gagal hapus";
+    return { status: "error", errors: { _form: [msg] } };
+  }
 }

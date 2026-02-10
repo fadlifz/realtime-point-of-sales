@@ -157,9 +157,9 @@ export async function updateUser(
   revalidatePath("/admin/user");
   return { status: "success" };
 }
-// src/app/(dashboard)/admin/user/actions.ts
+
 export async function deleteUser(
-  prevState: AuthFormState | null, // Pakai interface lu biar gak merah
+  prevState: AuthFormState | null,
   formData: FormData,
 ): Promise<AuthFormState> {
   const id = formData.get("id") as string;
