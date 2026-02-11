@@ -1,4 +1,3 @@
-import FormImage from "@/components/common/form-image";
 import FormInput from "@/components/common/form-input";
 import FormSelect from "@/components/common/form-select";
 import { Button } from "@/components/ui/button";
@@ -11,10 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
-import { AVAILABILITY_LIST } from "@/constants/auth-constant";
-import { CATEGORY_LIST } from "@/constants/menu-constant";
 import { STATUS_TABLE_LIST } from "@/constants/table-constant";
-import { Preview } from "@/types/general";
 import { Loader2 } from "lucide-react";
 import { FormEvent } from "react";
 import { FieldValues, Path, UseFormReturn } from "react-hook-form";
