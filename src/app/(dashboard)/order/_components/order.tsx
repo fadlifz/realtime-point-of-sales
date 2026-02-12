@@ -51,7 +51,7 @@ export default function OrderManagement() {
         .from("orders")
         .select(
           `
-            id, order_id, customer_name, status, payment_url, tables (name, id)
+            id, order_id, customer_name, status, payment_token, tables (name, id)
             `,
           { count: "exact" },
         )
