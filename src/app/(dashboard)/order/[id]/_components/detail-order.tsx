@@ -3,7 +3,7 @@
 import DataTable from "@/components/common/data-table";
 import { Button } from "@/components/ui/button";
 import { HEADER_TABLE_DETAIL_ORDER } from "@/constants/order-constant";
-import useDataTable from "@/hooks/user-data-table";
+import useDataTable from "@/hooks/use-data-table";
 import { createClient } from "@/lib/supabase/client";
 import { cn, convertIDR } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -101,7 +101,7 @@ export default function DetailOrder({ id }: { id: string }) {
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between gap-4 w-full">
         <h1 className="text-2xl font-bold">Detail Order</h1>
-        <Link href="">
+        <Link href={`/order/${id}/add`}>
           <Button>Add Order Item</Button>
         </Link>
       </div>
