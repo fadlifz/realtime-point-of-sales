@@ -45,7 +45,7 @@ export default function AppSidebar() {
                   <Coffee className="size-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
-                  <span className="truncate">WPU Cafe</span>
+                  <span className="truncate">STAR Cafe</span>
                 </div>
               </div>
             </SidebarMenuButton>

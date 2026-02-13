@@ -3,7 +3,7 @@ import DetailOrder from "./_components/detail-order";
 import { environment } from "@/configs/environment";
 
 export const metadata = {
-  title: "WPU Cafe | Detail Order",
+  title: "STAR Cafe | Detail Order",
 };
 
 // Perbaikan Tipe Data agar lebih aman dan menghilangkan error ESLint
