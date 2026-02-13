@@ -7,6 +7,7 @@ import { orderFormSchema } from "@/validations/order-validation";
 import { redirect } from "next/navigation";
 import midtrans from "midtrans-client";
 import { environment } from "@/configs/environment";
+import { revalidatePath } from "next/cache";
 
 export async function createOrder(
   prevState: OrderFormState,
@@ -29,7 +30,6 @@ export async function createOrder(
   }
 
   const supabase = await createClient();
-
   const orderId = `STARCAFE-${Date.now()}`;
 
   const [orderResult, tableResult] = await Promise.all([
@@ -65,6 +65,10 @@ export async function createOrder(
       },
     };
   }
+
+  // 2. Revalidate path agar list order di dashboard/admin terupdate
+  revalidatePath("/order");
+  revalidatePath("/admin");
 
   return {
     status: "success",
@@ -122,19 +126,23 @@ export async function addOrderItem(
   },
 ) {
   const supabase = await createClient();
-
   const payload = data.items.map(({ total, menu, ...item }) => item);
 
   const { error } = await supabase.from("orders_menus").insert(payload);
+
   if (error) {
     return {
       status: "error",
       errors: {
         ...prevState,
-        _form: [],
+        _form: [error.message],
       },
     };
   }
+
+  // 3. JURUS PAMUNGKAS: Buang cache halaman detail order
+  // Tanpa ini, setelah redirect data tidak akan muncul otomatis
+  revalidatePath(`/order/${data.order_id}`);
 
   redirect(`/order/${data.order_id}`);
 }
@@ -144,7 +152,6 @@ export async function updateStatusOrderitem(
   formData: FormData,
 ) {
   const supabase = await createClient();
-
   const { error } = await supabase
     .from("orders_menus")
     .update({
@@ -161,6 +168,10 @@ export async function updateStatusOrderitem(
       },
     };
   }
+
+  // 4. Revalidate agar status (Pending/Process) berubah saat itu juga
+  // Kita asumsikan ada hidden field 'order_id' di form atau kita revalidate global
+  revalidatePath("/order", "layout");
 
   return {
     status: "success",
