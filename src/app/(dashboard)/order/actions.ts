@@ -134,16 +134,12 @@ export async function addOrderItem(
     return {
       status: "error",
       errors: {
-        ...prevState,
         _form: [error.message],
       },
     };
   }
 
-  // 3. JURUS PAMUNGKAS: Buang cache halaman detail order
-  // Tanpa ini, setelah redirect data tidak akan muncul otomatis
   revalidatePath(`/order/${data.order_id}`);
-
   redirect(`/order/${data.order_id}`);
 }
 

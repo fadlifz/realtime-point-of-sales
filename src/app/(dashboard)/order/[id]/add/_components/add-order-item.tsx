@@ -112,20 +112,25 @@ export default function AddOrderItem({ id }: { id: string }) {
   };
 
   const [addOrderItemState, addOrderItemAction, isPendingAddOrderItem] =
-    useActionState(addOrderItem, INITIAL_STATE_ACTION);
+    useActionState<any, any>(addOrderItem, INITIAL_STATE_ACTION);
 
   const handleOrder = async () => {
-    const data = {
-      order_id: id,
-      items: carts.map((item) => ({
+    const cleanedItems = carts.map((item) => {
+      const { menu, ...restOfItem } = item;
+      return {
+        ...restOfItem,
         order_id: order?.id ?? "",
-        ...item,
         status: "pending",
-      })),
+      };
+    });
+
+    const payload = {
+      order_id: id,
+      items: cleanedItems,
     };
 
     startTransition(() => {
-      addOrderItemAction(data);
+      addOrderItemAction(payload);
     });
   };
 
