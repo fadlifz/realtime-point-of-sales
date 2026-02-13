@@ -6,7 +6,6 @@ export const metadata = {
   title: "STAR Cafe | Detail Order",
 };
 
-// Perbaikan Tipe Data agar lebih aman dan menghilangkan error ESLint
 declare global {
   interface Window {
     snap: {
@@ -23,11 +22,8 @@ export default async function DetailOrderPage({
 }) {
   const { id } = await params;
 
-  // Midtrans Snap JS memiliki domain yang berbeda dengan API URL.
-  // Sandbox: https://app.sandbox.midtrans.com/snap/snap.js
-  // Production: https://app.midtrans.com/snap/snap.js
   const snapScriptUrl =
-    environment.MIDTRANS_API_URL === "production" // Sesuaikan dengan variabel env production
+    environment.MIDTRANS_API_URL === "production"
       ? "https://app.midtrans.com/snap/snap.js"
       : "https://app.sandbox.midtrans.com/snap/snap.js";
 
@@ -36,7 +32,7 @@ export default async function DetailOrderPage({
       <Script
         src={snapScriptUrl}
         data-client-key={environment.MIDTRANS_CLIENT_KEY}
-        strategy="afterInteractive" // Lebih disarankan agar snap siap sebelum DetailOrder dipanggil
+        strategy="afterInteractive"
       />
       <DetailOrder id={id} />
     </div>
