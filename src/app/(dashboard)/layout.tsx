@@ -1,3 +1,6 @@
+"use client"; // WAJIB ADA karena kita pakai state untuk handle hydration
+
+import { useState, useEffect, ReactNode } from "react";
 import AppSidebar from "@/components/common/app-sidebar";
 import { DarkmodeToggle } from "@/components/common/darkmode-toggle";
 import { Separator } from "@/components/ui/separator";
@@ -6,10 +9,19 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { ReactNode } from "react";
 import DashboardBreadcrumb from "./_components/dashboard-breadcrumb";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return null;
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar />
