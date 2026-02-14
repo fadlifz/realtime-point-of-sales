@@ -33,10 +33,10 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data } = await supabase
         .from("orders")
-        .select("created_at")
+        .select("updated_at")
         .eq("status", "settled")
-        .gte("created_at", lastWeek.toISOString())
-        .order("created_at");
+        .gte("updated_at", lastWeek.toISOString())
+        .order("updated_at");
 
       const counts: Record<string, number> = {};
 
@@ -49,7 +49,7 @@ export default function Dashboard() {
       }
 
       (data ?? []).forEach((order) => {
-        const date = new Date(order.created_at).toISOString().slice(0, 10);
+        const date = new Date(order.updated_at).toISOString().slice(0, 10);
         if (counts[date] !== undefined) {
           counts[date] += 1;
         }
