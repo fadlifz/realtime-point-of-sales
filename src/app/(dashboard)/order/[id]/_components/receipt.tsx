@@ -17,7 +17,13 @@ const Receipt = ({
     created_at: string;
   };
   orderMenu:
-    | { menus: Menu; quantity: number; status: string; id: string }[]
+    | {
+        menus: Menu;
+        quantity: number;
+        status: string;
+        id: string;
+        nominal: number;
+      }[]
     | null
     | undefined;
   orderId: string;

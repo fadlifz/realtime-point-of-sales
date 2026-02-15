@@ -179,19 +179,30 @@ export async function addOrderItem(
 ) {
   const supabase = await createClient();
 
-  const payload = data.items.map(({ total, menu, ...item }) => item);
+  // PERBAIKAN: Sertakan 'nominal' dalam payload, hanya buang 'menu' (karena 'menu' adalah objek relasi)
+  const payload = data.items.map(({ menu, ...item }) => ({
+    ...item,
+    // Kita pastikan nominal masuk dan bertipe number
+    nominal: Number(item.nominal),
+  }));
 
   const { error } = await supabase.from("orders_menus").insert(payload);
+
   if (error) {
+    console.error("Insert Error:", error); // Tambah log agar mudah debug jika gagal
     return {
       status: "error",
       errors: {
         ...prevState,
-        _form: [],
+        _form: [error.message],
       },
     };
   }
+
+  // Penting: Revalidate agar data summary di halaman detail terupdate
   revalidatePath(`/order/${data.order_id}`);
+
+  // Karena ini Server Action, redirect akan memicu refresh client-side
   redirect(`/order/${data.order_id}`);
 }
 
@@ -224,7 +235,7 @@ export async function updateStatusOrderitem(
 }
 
 export async function generatePayment(
-  prevState: FormState,
+  prevState: any, // Gunakan any atau tipe spesifik State kamu
   formData: FormData,
 ) {
   const supabase = await createClient();
@@ -236,40 +247,47 @@ export async function generatePayment(
     isProduction: false,
     serverKey: environment.MIDTRANS_SERVER_KEY!,
   });
+
   const parameter = {
     transaction_details: {
       order_id: `${orderId}`,
-      gross_amount: parseFloat(grossAmount as string),
+      gross_amount: Math.round(parseFloat(grossAmount as string)), // Midtrans tidak suka desimal di gross_amount
     },
     customer_details: {
-      first_name: customerName,
+      first_name: customerName as string,
     },
   };
 
-  const result = await snap.createTransaction(parameter);
+  try {
+    const result = await snap.createTransaction(parameter);
 
-  if (result.error_messages) {
+    // Update token ke database
+    const { error: dbError } = await supabase
+      .from("orders")
+      .update({ payment_token: result.token })
+      .eq("order_id", orderId);
+
+    if (dbError) throw new Error(dbError.message);
+
+    // Update cache Next.js
+    revalidatePath(`/order/${orderId}`);
+
+    return {
+      status: "success",
+      data: {
+        payment_token: result.token,
+      },
+      errors: { _form: [] }, // Pastikan struktur error tetap ada agar tidak undefined di UI
+    };
+  } catch (error: any) {
     return {
       status: "error",
       errors: {
-        ...prevState,
-        _form: [result.error_messages],
+        _form: [error.message || "Failed to generate payment"],
       },
       data: {
         payment_token: "",
       },
     };
   }
-
-  await supabase
-    .from("orders")
-    .update({ payment_token: result.token })
-    .eq("order_id", orderId);
-
-  return {
-    status: "success",
-    data: {
-      payment_token: `${result.token}`,
-    },
-  };
 }

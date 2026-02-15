@@ -16,19 +16,16 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 export default function Dashboard() {
-  // TETAP PAKAI: Hydration Guard untuk mencegah error ID Mismatch
   const [isMounted, setIsMounted] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
   const lastWeek = new Date();
   lastWeek.setDate(lastWeek.getDate() - 6);
   lastWeek.setHours(0, 0, 0, 0);
 
-  // QUERY GRAFIK: Tetap pakai updated_at & Looping 7 hari
   const { data: orders } = useQuery({
     queryKey: ["orders-per-day"],
     queryFn: async () => {
@@ -71,50 +68,59 @@ export default function Dashboard() {
 
   const lastMonth = new Date(new Date().getFullYear(), 0, 1).toISOString();
 
-  // QUERY REVENUE: Tetap pakai pengaman Infinity
   const { data: revenue } = useQuery({
     queryKey: ["revenue-this-month"],
     queryFn: async () => {
       const { data: dataThisMonth } = await supabase
         .from("orders_menus")
-        .select("quantity, menus (price), created_at")
+
+        .select("nominal, created_at")
         .gte("created_at", thisMonth);
 
       const { data: dataLastMonth } = await supabase
         .from("orders_menus")
-        .select("quantity, menus (price), created_at")
+        .select("nominal, created_at")
         .gte("created_at", lastMonth)
         .lt("created_at", thisMonth);
 
-      const calculateRevenue = (data: any[]) =>
-        (data ?? []).reduce((sum, item) => {
-          const price =
-            (item.menus as unknown as { price: number })?.price ?? 0;
-          return sum + price * item.quantity;
-        }, 0);
+      const totalRevenueThisMonth = (dataThisMonth ?? []).reduce(
+        (sum, item) => {
+          return sum + item.nominal;
+        },
+        0,
+      );
 
-      const totalRevenueThisMonth = calculateRevenue(dataThisMonth || []);
-      const totalRevenueLastMonth = calculateRevenue(dataLastMonth || []);
+      const totalRevenueLastMonth = (dataLastMonth ?? []).reduce(
+        (sum, item) => {
+          return sum + item.nominal;
+        },
+        0,
+      );
 
-      const growthRate =
-        totalRevenueLastMonth > 0
-          ? (
-              ((totalRevenueThisMonth - totalRevenueLastMonth) /
-                totalRevenueLastMonth) *
-              100
-            ).toFixed(2)
-          : "0";
+      let growthRate: string;
 
+      if (totalRevenueLastMonth === 0) {
+        growthRate = "0";
+      } else {
+        growthRate = (
+          ((totalRevenueThisMonth - totalRevenueLastMonth) /
+            totalRevenueLastMonth) *
+          100
+        ).toFixed(2);
+      }
       const daysInData = new Set(
         (dataThisMonth ?? []).map((item) =>
           new Date(item.created_at).toISOString().slice(0, 10),
         ),
       ).size;
 
+      const averageRevenueThisMonth =
+        daysInData > 0 ? totalRevenueThisMonth / daysInData : 0;
+
       return {
         totalRevenueThisMonth,
-        averageRevenueThisMonth:
-          daysInData > 0 ? totalRevenueThisMonth / daysInData : 0,
+        totalRevenueLastMonth,
+        averageRevenueThisMonth,
         growthRate,
       };
     },
@@ -148,16 +154,12 @@ export default function Dashboard() {
     enabled: isMounted,
   });
 
-  // TETAP PAKAI: Mencegah error merah (Hydration)
   if (!isMounted) return null;
-
   return (
     <div className="w-full">
       <div className="flex flex-col lg:flex-row mb-4 gap-2 justify-between w-full">
         <h1 className="text-2xl font-bold">Dashboard</h1>
       </div>
-
-      {/* Stats Cards Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <Card>
           <CardHeader>
@@ -172,7 +174,6 @@ export default function Dashboard() {
             </div>
           </CardFooter>
         </Card>
-
         <Card>
           <CardHeader>
             <CardDescription>Average Revenue</CardDescription>
@@ -186,7 +187,6 @@ export default function Dashboard() {
             </div>
           </CardFooter>
         </Card>
-
         <Card>
           <CardHeader>
             <CardDescription>Total Order</CardDescription>
@@ -200,7 +200,6 @@ export default function Dashboard() {
             </div>
           </CardFooter>
         </Card>
-
         <Card>
           <CardHeader>
             <CardDescription>Growth Rate</CardDescription>
@@ -215,9 +214,7 @@ export default function Dashboard() {
           </CardFooter>
         </Card>
       </div>
-
       <div className="flex flex-col lg:flex-row gap-4">
-        {/* Chart Section */}
         <Card className="w-full lg:w-2/3">
           <CardHeader>
             <CardTitle>Order Settled Per Week</CardTitle>
@@ -230,8 +227,6 @@ export default function Dashboard() {
             <LineCharts data={orders} />
           </div>
         </Card>
-
-        {/* Active Order Section (UI Baru yang Lebih Rapih) */}
         <Card className="w-full lg:w-1/3">
           <CardHeader>
             <CardTitle>Active Order</CardTitle>

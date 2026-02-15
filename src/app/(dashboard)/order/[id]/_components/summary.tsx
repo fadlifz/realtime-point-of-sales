@@ -13,38 +13,35 @@ import {
   useEffect,
   useMemo,
   useCallback,
+  useState,
 } from "react";
 import { generatePayment } from "../../actions";
 import { INITIAL_STATE_GENERATE_PAYMENT } from "@/constants/order-constant";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-// Perluas interface order untuk menerima payment_token
 interface SummaryProps {
   order: {
     customer_name: string;
     tables: { name: string }[];
     status: string;
-    payment_token?: string | null; // Tambahkan ini
+    payment_token?: string | null;
   };
   orderMenu:
-    | { menus: Menu; quantity: number; status: string }[]
+    | { menus: Menu; quantity: number; status: string; nominal: number }[]
     | null
     | undefined;
-  id: string; // Ini adalah order_id (contoh: STARCAFE-123)
+  id: string;
 }
 
 export default function Summary({ order, orderMenu, id }: SummaryProps) {
+  const router = useRouter();
   const [isSnapOpen, setIsSnapOpen] = useState(false);
   const { grandTotal, totalPrice, tax, service } = usePricing(orderMenu);
   const profile = useAuthStore((state) => state.profile);
-
-  const isAllServed = useMemo(() => {
-    return orderMenu?.every((item) => item.status === "served");
-  }, [orderMenu]);
 
   const [
     generatePaymentState,
@@ -52,45 +49,53 @@ export default function Summary({ order, orderMenu, id }: SummaryProps) {
     isPendingGeneratePayment,
   ] = useActionState(generatePayment, INITIAL_STATE_GENERATE_PAYMENT);
 
-  // Fungsi untuk memicu popup Midtrans
-  const openSnapPopup = useCallback((token: string) => {
-    if (window.snap) {
-      setIsSnapOpen(true);
-      window.snap.pay(token, {
-        onSuccess: (result: any) => {
-          setIsSnapOpen(false);
-          toast.success("Payment Successful!");
-        },
-        onPending: (result: any) => {
-          // JANGAN set setIsSnapOpen(false) di sini jika ingin tombol tetap disable
-          // Tapi lebih baik biarkan disable agar tidak double input
-          setIsSnapOpen(true);
-          toast.info(
-            "Waiting for your payment. Please complete the transaction.",
-          );
-        },
-        onError: (result: any) => {
-          setIsSnapOpen(false);
-          toast.error("Payment Failed.");
-        },
-        onClose: () => {
-          setIsSnapOpen(false);
-          toast.warning("Payment popup closed.");
-        },
-      });
-    }
-  }, []);
+  const currentToken = useMemo(() => {
+    return order?.payment_token || generatePaymentState.data?.payment_token;
+  }, [order?.payment_token, generatePaymentState.data?.payment_token]);
+
+  const isAllServed = useMemo(() => {
+    return orderMenu?.every((item) => item.status === "served");
+  }, [orderMenu]);
+
+  const openSnapPopup = useCallback(
+    (token: string) => {
+      if (window.snap) {
+        setIsSnapOpen(true);
+        window.snap.pay(token, {
+          onSuccess: () => {
+            setIsSnapOpen(false);
+            toast.success("Payment Successful!");
+            router.push(`/payment/success?order_id=${id}`);
+          },
+          onPending: () => {
+            setIsSnapOpen(false);
+            router.refresh();
+            toast.info("Waiting for payment.");
+          },
+          onClose: () => {
+            setIsSnapOpen(false);
+            router.refresh();
+            toast.warning("Payment popup closed.");
+          },
+          onError: () => {
+            setIsSnapOpen(false);
+            router.refresh();
+            toast.error("Payment Failed.");
+          },
+        });
+      }
+    },
+    [id, router],
+  );
 
   const handlePayClick = () => {
-    // 1. CEK TOKEN: Jika di database sudah ada token untuk order ini, pakai yang ada
-    if (order?.payment_token) {
-      openSnapPopup(order.payment_token);
+    if (currentToken) {
+      openSnapPopup(currentToken);
       return;
     }
 
-    // 2. Jika belum ada token, baru panggil Server Action
     const formData = new FormData();
-    formData.append("id", id || "");
+    formData.append("id", id);
     formData.append("gross_amount", grandTotal.toString());
     formData.append("customer_name", order?.customer_name || "");
 
@@ -99,7 +104,6 @@ export default function Summary({ order, orderMenu, id }: SummaryProps) {
     });
   };
 
-  // Pantau hasil dari server action generatePayment
   useEffect(() => {
     if (generatePaymentState?.status === "error") {
       toast.error("Generate Payment Failed", {
@@ -109,17 +113,17 @@ export default function Summary({ order, orderMenu, id }: SummaryProps) {
 
     if (
       generatePaymentState?.status === "success" &&
-      generatePaymentState.data?.payment_token
+      generatePaymentState.data?.payment_token &&
+      !isSnapOpen
     ) {
+      router.refresh();
       openSnapPopup(generatePaymentState.data.payment_token);
     }
-  }, [generatePaymentState, openSnapPopup]);
+  }, [generatePaymentState, openSnapPopup, router, isSnapOpen]);
 
   return (
     <Card className="w-full shadow-sm">
       <CardContent className="space-y-4 pt-6">
-        {" "}
-        {/* Tambah pt-6 agar rapi */}
         <h3 className="text-lg font-semibold">Customer Information</h3>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -154,8 +158,9 @@ export default function Summary({ order, orderMenu, id }: SummaryProps) {
             <p>Total</p>
             <p className="text-teal-600">{convertIDR(grandTotal)}</p>
           </div>
+
           {order?.status === "process" && profile.role !== "kitchen" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Button
                 type="button"
                 onClick={handlePayClick}
@@ -165,34 +170,32 @@ export default function Summary({ order, orderMenu, id }: SummaryProps) {
                   isSnapOpen ||
                   orderMenu?.length === 0
                 }
-                className="w-full font-semibold bg-teal-500 hover:bg-teal-600 text-white"
+                className="w-full font-semibold bg-teal-500 hover:bg-teal-600 text-white py-6"
               >
                 {isPendingGeneratePayment || isSnapOpen ? (
-                  <Loader2 className="animate-spin mr-2" />
+                  <Loader2 className="animate-spin mr-2 h-5 w-5" />
                 ) : null}
-
                 {isSnapOpen
-                  ? "Payment Window Open..."
-                  : order?.payment_token
-                    ? "Re-open Payment" // Jika tidak sengaja tertutup, tombolnya jadi 'Buka Lagi'
+                  ? "Window Open..."
+                  : currentToken
+                    ? "Re-open Payment"
                     : "Pay Now"}
               </Button>
 
-              {/* Info tambahan jika token sudah ada tapi popup tertutup */}
-              {order?.payment_token && !isSnapOpen && (
-                <p className="text-[11px] text-center text-amber-600 font-medium animate-pulse">
-                  ⚠️ Transaksi sedang menunggu pembayaran.
-                </p>
+              {currentToken && !isSnapOpen && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <AlertCircle className="h-4 w-4" /> Payment in Progress
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    The payment window was closed. Click{" "}
+                    <strong>"Re-open Payment"</strong> to see your payment code
+                    again.
+                  </p>
+                </div>
               )}
             </div>
           )}
-          {/* OPTIONAL: Tambahkan tombol bantuan jika popup tertutup tapi token sudah ada */}
-          {order?.payment_token && !isSnapOpen && (
-            <p className="text-[10px] text-center text-muted-foreground mt-2">
-              Payment link has been generated. If the popup didn't appear,
-              please refresh the page.
-            </p>
-          )}{" "}
         </div>
       </CardContent>
     </Card>

@@ -15,8 +15,12 @@ import { Cart } from "@/types/order";
 import { Menu } from "@/validations/menu-validation";
 import { addOrderItem } from "../../../actions";
 import { INITIAL_STATE_ACTION } from "@/constants/general-constant";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 export default function AddOrderItem({ id }: { id: string }) {
+  const queryClient = useQueryClient();
+  const router = useRouter(); // Inisialisasi
   const supabase = createClient();
   const {
     currentSearch,
@@ -73,6 +77,8 @@ export default function AddOrderItem({ id }: { id: string }) {
 
   const handleAddToCart = (menu: Menu, action: "increment" | "decrement") => {
     const existingItem = carts.find((item) => item.menu_id === menu.id);
+    const priceAfterDiscount =
+      menu.price - menu.price * ((menu.discount || 0) / 100);
     if (existingItem) {
       if (action === "decrement") {
         if (existingItem.quantity > 1) {
@@ -82,7 +88,7 @@ export default function AddOrderItem({ id }: { id: string }) {
                 ? {
                     ...item,
                     quantity: item.quantity - 1,
-                    total: item.total - menu.price,
+                    nominal: item.nominal - priceAfterDiscount,
                   }
                 : item,
             ),
@@ -97,7 +103,7 @@ export default function AddOrderItem({ id }: { id: string }) {
               ? {
                   ...item,
                   quantity: item.quantity + 1,
-                  total: item.total + menu.price,
+                  nominal: item.nominal + priceAfterDiscount,
                 }
               : item,
           ),
@@ -106,13 +112,27 @@ export default function AddOrderItem({ id }: { id: string }) {
     } else {
       setCarts([
         ...carts,
-        { menu_id: menu.id, quantity: 1, total: menu.price, notes: "", menu },
+        {
+          menu_id: menu.id,
+          quantity: 1,
+          nominal: priceAfterDiscount,
+          notes: "",
+          menu,
+        },
       ]);
     }
   };
 
   const [addOrderItemState, addOrderItemAction, isPendingAddOrderItem] =
-    useActionState<any, any>(addOrderItem, INITIAL_STATE_ACTION);
+    useActionState<any, any>(async (prevState: any, payload: any) => {
+      const result = await addOrderItem(prevState, payload);
+
+      // JIKA BERHASIL, PAKSA TANSTACK QUERY REFETCH
+      // Ganti "menus" atau "order" sesuai queryKey yang ingin diupdate
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+
+      return result;
+    }, INITIAL_STATE_ACTION);
 
   const handleOrder = async () => {
     const cleanedItems = carts.map((item) => {
@@ -129,8 +149,15 @@ export default function AddOrderItem({ id }: { id: string }) {
       items: cleanedItems,
     };
 
-    startTransition(() => {
-      addOrderItemAction(payload);
+    startTransition(async () => {
+      // 2. Jalankan action
+      await addOrderItemAction(payload);
+
+      // 3. Paksa Tanstack Query hapus cache lama supaya ambil data baru
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+
+      // 4. Paksa Router refresh data Server Component
+      router.refresh();
     });
   };
 
