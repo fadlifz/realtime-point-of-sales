@@ -3,7 +3,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { FormState } from "@/types/general";
 import { Cart, OrderFormState } from "@/types/order";
-import { orderFormSchema } from "@/validations/order-validation";
+import {
+  orderFormSchema,
+  orderTakeawayFormSchema,
+} from "@/validations/order-validation";
 import { redirect } from "next/navigation";
 import midtrans from "midtrans-client";
 import { environment } from "@/configs/environment";
@@ -30,6 +33,7 @@ export async function createOrder(
   }
 
   const supabase = await createClient();
+
   const orderId = `STARCAFE-${Date.now()}`;
 
   const [orderResult, tableResult] = await Promise.all([
@@ -67,6 +71,52 @@ export async function createOrder(
   }
 
   // 2. Revalidate path agar list order di dashboard/admin terupdate
+  revalidatePath("/order");
+  revalidatePath("/admin");
+
+  return {
+    status: "success",
+  };
+}
+
+export async function createOrderTakeaway(
+  prevState: OrderFormState,
+  formData: FormData,
+) {
+  const validatedFields = orderTakeawayFormSchema.safeParse({
+    customer_name: formData.get("customer_name"),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      status: "error",
+      errors: {
+        ...validatedFields.error.flatten().fieldErrors,
+        _form: [],
+      },
+    };
+  }
+
+  const supabase = await createClient();
+
+  const orderId = `STARCAFE-${Date.now()}`;
+
+  const { error } = await supabase.from("orders").insert({
+    order_id: orderId,
+    customer_name: validatedFields.data.customer_name,
+    status: "process",
+  });
+
+  if (error) {
+    return {
+      status: "error",
+      errors: {
+        ...prevState.errors,
+        _form: [error.message],
+      },
+    };
+  }
+
   revalidatePath("/order");
   revalidatePath("/admin");
 
@@ -113,6 +163,8 @@ export async function updateReservation(
     };
   }
 
+  revalidatePath("/order");
+
   return {
     status: "success",
   };
@@ -126,19 +178,19 @@ export async function addOrderItem(
   },
 ) {
   const supabase = await createClient();
+
   const payload = data.items.map(({ total, menu, ...item }) => item);
 
   const { error } = await supabase.from("orders_menus").insert(payload);
-
   if (error) {
     return {
       status: "error",
       errors: {
-        _form: [error.message],
+        ...prevState,
+        _form: [],
       },
     };
   }
-
   revalidatePath(`/order/${data.order_id}`);
   redirect(`/order/${data.order_id}`);
 }
@@ -148,6 +200,7 @@ export async function updateStatusOrderitem(
   formData: FormData,
 ) {
   const supabase = await createClient();
+
   const { error } = await supabase
     .from("orders_menus")
     .update({
@@ -164,11 +217,7 @@ export async function updateStatusOrderitem(
       },
     };
   }
-
-  // 4. Revalidate agar status (Pending/Process) berubah saat itu juga
-  // Kita asumsikan ada hidden field 'order_id' di form atau kita revalidate global
   revalidatePath("/order", "layout");
-
   return {
     status: "success",
   };

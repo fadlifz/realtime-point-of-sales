@@ -16,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 export default function Dashboard() {
-  // FIX 1: Hydration Guard (Mencegah error gambar 3)
+  // TETAP PAKAI: Hydration Guard untuk mencegah error ID Mismatch
   const [isMounted, setIsMounted] = useState(false);
   const supabase = createClient();
 
@@ -28,6 +28,7 @@ export default function Dashboard() {
   lastWeek.setDate(lastWeek.getDate() - 6);
   lastWeek.setHours(0, 0, 0, 0);
 
+  // QUERY GRAFIK: Tetap pakai updated_at & Looping 7 hari
   const { data: orders } = useQuery({
     queryKey: ["orders-per-day"],
     queryFn: async () => {
@@ -40,7 +41,7 @@ export default function Dashboard() {
 
       const counts: Record<string, number> = {};
 
-      // FIX 2: Kembalikan logic looping 7 hari agar grafik tidak kosong (Mencegah error gambar 2)
+      // PENTING: Inisialisasi 7 hari agar grafik tidak patah/kosong
       for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(d.getDate() - i);
@@ -70,6 +71,7 @@ export default function Dashboard() {
 
   const lastMonth = new Date(new Date().getFullYear(), 0, 1).toISOString();
 
+  // QUERY REVENUE: Tetap pakai pengaman Infinity
   const { data: revenue } = useQuery({
     queryKey: ["revenue-this-month"],
     queryFn: async () => {
@@ -94,7 +96,6 @@ export default function Dashboard() {
       const totalRevenueThisMonth = calculateRevenue(dataThisMonth || []);
       const totalRevenueLastMonth = calculateRevenue(dataLastMonth || []);
 
-      // FIX 3: Cegah Infinity jika pembagi adalah 0
       const growthRate =
         totalRevenueLastMonth > 0
           ? (
@@ -110,13 +111,10 @@ export default function Dashboard() {
         ),
       ).size;
 
-      const averageRevenueThisMonth =
-        daysInData > 0 ? totalRevenueThisMonth / daysInData : 0;
-
       return {
         totalRevenueThisMonth,
-        totalRevenueLastMonth,
-        averageRevenueThisMonth,
+        averageRevenueThisMonth:
+          daysInData > 0 ? totalRevenueThisMonth / daysInData : 0,
         growthRate,
       };
     },
@@ -131,7 +129,6 @@ export default function Dashboard() {
         .select("id", { count: "exact" })
         .eq("status", "settled")
         .gte("created_at", thisMonth);
-
       return count;
     },
     enabled: isMounted,
@@ -146,13 +143,12 @@ export default function Dashboard() {
         .eq("status", "process")
         .limit(5)
         .order("created_at", { ascending: false });
-
       return data;
     },
     enabled: isMounted,
   });
 
-  // FIX 1: Jangan render apapun sebelum mounted untuk menghindari Hydration error
+  // TETAP PAKAI: Mencegah error merah (Hydration)
   if (!isMounted) return null;
 
   return (
@@ -161,6 +157,7 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold">Dashboard</h1>
       </div>
 
+      {/* Stats Cards Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <Card>
           <CardHeader>
@@ -220,9 +217,10 @@ export default function Dashboard() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4">
+        {/* Chart Section */}
         <Card className="w-full lg:w-2/3">
           <CardHeader>
-            <CardTitle>Order Create Per Week</CardTitle>
+            <CardTitle>Order Settled Per Week</CardTitle>
             <CardDescription>
               Showing orders from {lastWeek.toLocaleDateString()} to{" "}
               {new Date().toLocaleDateString()}
@@ -233,6 +231,7 @@ export default function Dashboard() {
           </div>
         </Card>
 
+        {/* Active Order Section (UI Baru yang Lebih Rapih) */}
         <Card className="w-full lg:w-1/3">
           <CardHeader>
             <CardTitle>Active Order</CardTitle>
@@ -252,7 +251,7 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground">
                       Table: {(order.tables as any)?.name ?? "N/A"}
                     </p>
-                    <p className="text-sm text-muted-foreground truncate text-xs">
+                    <p className="text-xs text-muted-foreground truncate">
                       ID: {order.order_id}
                     </p>
                   </div>

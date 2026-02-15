@@ -53,7 +53,10 @@ export default function CartSection({
             <div className="space-y-2">
               <Label>Table</Label>
               <Input
-                value={(order?.tables as unknown as { name: string })?.name}
+                value={
+                  (order?.tables as unknown as { name: string })?.name ||
+                  "Takeaway"
+                }
                 disabled
               />
             </div>
