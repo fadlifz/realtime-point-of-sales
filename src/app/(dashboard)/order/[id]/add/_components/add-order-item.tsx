@@ -3,9 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FILTER_MENU } from "@/constants/order-constant";
+import { INITIAL_STATE_ACTION } from "@/constants/general-constant";
 import useDataTable from "@/hooks/use-data-table";
 import { createClient } from "@/lib/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import CardMenu from "./card-menu";
 import LoadingCardMenu from "./loading-card-menu";
@@ -14,14 +15,14 @@ import { startTransition, useActionState, useState } from "react";
 import { Cart } from "@/types/order";
 import { Menu } from "@/validations/menu-validation";
 import { addOrderItem } from "../../../actions";
-import { INITIAL_STATE_ACTION } from "@/constants/general-constant";
-import { useQueryClient } from "@tanstack/react-query";
+// PENTING: Harus dari next/navigation
 import { useRouter } from "next/navigation";
 
 export default function AddOrderItem({ id }: { id: string }) {
   const queryClient = useQueryClient();
-  const router = useRouter(); // Inisialisasi
+  const router = useRouter();
   const supabase = createClient();
+
   const {
     currentSearch,
     currentFilter,
@@ -29,31 +30,25 @@ export default function AddOrderItem({ id }: { id: string }) {
     handleChangeFilter,
   } = useDataTable();
 
+  // 1. Fetch data menu
   const { data: menus, isLoading: isLoadingMenu } = useQuery({
     queryKey: ["menus", currentSearch, currentFilter],
     queryFn: async () => {
       const query = supabase
         .from("menus")
-        .select("*", { count: "exact" })
+        .select("*")
         .order("created_at")
         .eq("is_available", true)
         .ilike("name", `%${currentSearch}%`);
 
-      if (currentFilter) {
-        query.eq("category", currentFilter);
-      }
-
+      if (currentFilter) query.eq("category", currentFilter);
       const result = await query;
-
-      if (result.error)
-        toast.error("Get Menu data failed", {
-          description: result.error.message,
-        });
-
+      if (result.error) throw result.error;
       return result;
     },
   });
 
+  // 2. Fetch detail order untuk dapat UUID (order.id)
   const { data: order } = useQuery({
     queryKey: ["order", id],
     queryFn: async () => {
@@ -62,12 +57,7 @@ export default function AddOrderItem({ id }: { id: string }) {
         .select("id, customer_name, status, payment_token, tables (name, id)")
         .eq("order_id", id)
         .single();
-
-      if (result.error)
-        toast.error("Get Order data failed", {
-          description: result.error.message,
-        });
-
+      if (result.error) throw result.error;
       return result.data;
     },
     enabled: !!id,
@@ -75,10 +65,12 @@ export default function AddOrderItem({ id }: { id: string }) {
 
   const [carts, setCarts] = useState<Cart[]>([]);
 
+  // 3. Logic Keranjang
   const handleAddToCart = (menu: Menu, action: "increment" | "decrement") => {
     const existingItem = carts.find((item) => item.menu_id === menu.id);
     const priceAfterDiscount =
       menu.price - menu.price * ((menu.discount || 0) / 100);
+
     if (existingItem) {
       if (action === "decrement") {
         if (existingItem.quantity > 1) {
@@ -123,42 +115,51 @@ export default function AddOrderItem({ id }: { id: string }) {
     }
   };
 
-  const [addOrderItemState, addOrderItemAction, isPendingAddOrderItem] =
-    useActionState<any, any>(async (prevState: any, payload: any) => {
-      const result = await addOrderItem(prevState, payload);
+  // 4. Action State dengan casting 'any' agar tidak error 'never'
+  const [state, addOrderItemAction, isPending] = useActionState<any, any>(
+    addOrderItem as any,
+    INITIAL_STATE_ACTION,
+  );
 
-      // JIKA BERHASIL, PAKSA TANSTACK QUERY REFETCH
-      // Ganti "menus" atau "order" sesuai queryKey yang ingin diupdate
-      queryClient.invalidateQueries({ queryKey: ["order", id] });
+  // 5. Fungsi Submit
+  const handleOrder = () => {
+    if (carts.length === 0) return toast.error("Cart is empty");
+    if (!order?.id) return toast.error("Order ID not found");
 
-      return result;
-    }, INITIAL_STATE_ACTION);
-
-  const handleOrder = async () => {
     const cleanedItems = carts.map((item) => {
       const { menu, ...restOfItem } = item;
       return {
         ...restOfItem,
-        order_id: order?.id ?? "",
+        order_id: order.id, // UUID internal
         status: "pending",
       };
     });
 
     const payload = {
-      order_id: id,
+      order_id: id, // Custom ID (STARCAFE-xxx)
       items: cleanedItems,
     };
-
-    startTransition(async () => {
-      // 2. Jalankan action
-      await addOrderItemAction(payload);
-
-      // 3. Paksa Tanstack Query hapus cache lama supaya ambil data baru
-      queryClient.invalidateQueries({ queryKey: ["order", id] });
-
-      // 4. Paksa Router refresh data Server Component
-      router.refresh();
+    startTransition(() => {
+      addOrderItemAction(payload as any);
+      toast.success("Items added successfully");
     });
+
+    //   // Kita panggil action-nya dan simpan hasilnya di variabel 'result'
+    //   const result = await addOrderItemAction(payload as any);
+
+    //   // Cast ke 'any' saat pengecekan agar TS tidak komplain
+    //   const res = result as any;
+
+    //   if (res?.status === "success") {
+    //     setCarts([]);
+
+    //     // Refresh data Tanstack & Server Component
+    //     await queryClient.invalidateQueries({ queryKey: ["order", id] });
+    //     router.refresh();
+    //   } else {
+    //     toast.error(res?.errors?._form?.[0] || "Failed to add items");
+    //   }
+    // });
   };
 
   return (
@@ -184,7 +185,8 @@ export default function AddOrderItem({ id }: { id: string }) {
             onChange={(e) => handleChangeSearch(e.target.value)}
           />
         </div>
-        {isLoadingMenu && !menus ? (
+
+        {isLoadingMenu ? (
           <LoadingCardMenu />
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 w-full gap-4">
@@ -197,17 +199,15 @@ export default function AddOrderItem({ id }: { id: string }) {
             ))}
           </div>
         )}
-        {!isLoadingMenu && menus?.data?.length === 0 && (
-          <div className="text-center w-full">Menu not found</div>
-        )}
       </div>
+
       <div className="lg:w-1/3">
         <CartSection
           order={order}
           carts={carts}
           setCarts={setCarts}
           onAddToCart={handleAddToCart}
-          isLoading={isPendingAddOrderItem}
+          isLoading={isPending}
           onOrder={handleOrder}
         />
       </div>

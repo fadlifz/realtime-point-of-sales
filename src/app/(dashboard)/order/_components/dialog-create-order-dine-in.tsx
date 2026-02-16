@@ -53,16 +53,17 @@ export default function DialogCreateOrderDineIn({
   useEffect(() => {
     if (createOrderState?.status === "error") {
       toast.error("Create Order Failed", {
+        id: "create-order-toast", // ID unik
         description: createOrderState.errors?._form?.[0],
       });
     }
 
     if (createOrderState?.status === "success") {
-      toast.success("Create Order Success");
+      toast.success("Create Order Success", { id: "create-order-toast" }); // ID unik
       form.reset();
       closeDialog();
     }
-  }, [createOrderState]);
+  }, [createOrderState, form, closeDialog]);
 
   return (
     <DialogContent className="sm:max-w-[425px] max-h-[90vh]">

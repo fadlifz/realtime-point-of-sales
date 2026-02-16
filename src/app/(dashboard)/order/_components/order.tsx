@@ -7,7 +7,7 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import useDataTable from "@/hooks/use-data-table";
 import { createClientSupabase } from "@/lib/supabase/default";
-import { useQuery, useQueryClient } from "@tanstack/react-query"; // Tambahkan useQueryClient
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Link2Icon, Package, ScrollText, Utensils } from "lucide-react";
 import {
   startTransition,
@@ -35,7 +35,7 @@ import {
 
 export default function OrderManagement() {
   const supabase = createClientSupabase();
-  const queryClient = useQueryClient(); // Inisialisasi queryClient
+  const queryClient = useQueryClient();
 
   const {
     currentPage,
@@ -46,6 +46,9 @@ export default function OrderManagement() {
     handleChangeSearch,
   } = useDataTable();
   const profile = useAuthStore((state) => state.profile);
+
+  // State untuk mengunci notifikasi agar tidak duplikat
+  const [lastProcessedState, setLastProcessedState] = useState<any>(null);
 
   const {
     data: orders,
@@ -61,7 +64,7 @@ export default function OrderManagement() {
           { count: "exact" },
         )
         .range((currentPage - 1) * currentLimit, currentPage * currentLimit - 1)
-        .order("created_at", { ascending: false }); // Urutkan dari yang terbaru
+        .order("created_at", { ascending: false });
 
       if (currentSearch) {
         query.or(
@@ -87,27 +90,16 @@ export default function OrderManagement() {
     },
   });
 
-  // PERBAIKAN REFRESH OTOMATIS
+  // REALTIME SYNC
   useEffect(() => {
-    // Inisialisasi channel
     const channel = supabase
-      .channel("orders-realtime") // Gunakan nama channel yang unik
+      .channel("orders-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-        },
-        (payload) => {
-          console.log("Change detected in Orders table:", payload);
-
-          // PENTING: Invalidate akan memberitahu React Query bahwa cache sudah basi
-          // refetch akan memaksa penarikan data saat itu juga
+        { event: "*", schema: "public", table: "orders" },
+        () => {
           queryClient.invalidateQueries({ queryKey: ["orders"] });
           queryClient.invalidateQueries({ queryKey: ["tables"] });
-
-          // Tambahan: Panggil refetch secara eksplisit untuk menjamin UI terupdate
           refetchOrders();
           refetchTables();
         },
@@ -115,7 +107,6 @@ export default function OrderManagement() {
       .subscribe();
 
     return () => {
-      // Cleanup: Hapus channel saat komponen unmount
       supabase.removeChannel(channel);
     };
   }, [supabase, queryClient, refetchOrders, refetchTables]);
@@ -141,34 +132,43 @@ export default function OrderManagement() {
     });
   };
 
-  // Di dalam OrderManagement component
+  // HANDLING NOTIFICATION (FIX DUPLICATE TOAST)
   useEffect(() => {
-    if (reservedState?.status === "success") {
+    if (
+      reservedState?.status === "success" &&
+      reservedState !== lastProcessedState
+    ) {
       toast.success("Update Reservation Success");
+      setLastProcessedState(reservedState); // Kunci state ini
 
-      // 1. Invalidate cache agar React Query menarik data terbaru
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-
-      // 2. Jika ingin lebih instan, panggil refetch manual
       refetchOrders();
       refetchTables();
     }
 
-    if (reservedState?.status === "error") {
+    if (
+      reservedState?.status === "error" &&
+      reservedState !== lastProcessedState
+    ) {
       toast.error("Update Reservation Failed", {
         description: reservedState.errors?._form?.[0],
       });
+      setLastProcessedState(reservedState); // Kunci state ini
     }
-  }, [reservedState, queryClient, refetchOrders, refetchTables]);
+  }, [
+    reservedState,
+    queryClient,
+    refetchOrders,
+    refetchTables,
+    lastProcessedState,
+  ]);
 
-  // PERBAIKAN LOGIKA FILTERED DATA (SOLUSI ERROR NULL)
   const filteredData = useMemo(() => {
     return (orders?.data || []).map((order, index) => {
       return [
         currentLimit * (currentPage - 1) + index + 1,
         order.order_id,
         order.customer_name,
-        // SOLUSI: Gunakan optional chaining (?.) dan fallback string "Takeaway"
         (order.tables as unknown as { name: string })?.name || "Takeaway",
         <div
           key={order.id}
@@ -258,7 +258,7 @@ export default function OrderManagement() {
                 <DropdownMenuLabel>Create Order</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <Dialog>
-                  <DialogTrigger className="flex items-center gap-2 text-sm p-2 w-full rounded-md hover:bg-muted transition-colors">
+                  <DialogTrigger className="flex items-center gap-2 text-sm p-2 w-full rounded-md hover:bg-muted transition-colors text-left">
                     <Utensils className="size-4" /> Dine In
                   </DialogTrigger>
                   <DialogCreateOrderDineIn
@@ -267,7 +267,7 @@ export default function OrderManagement() {
                   />
                 </Dialog>
                 <Dialog>
-                  <DialogTrigger className="flex items-center gap-2 text-sm p-2 w-full rounded-md hover:bg-muted transition-colors">
+                  <DialogTrigger className="flex items-center gap-2 text-sm p-2 w-full rounded-md hover:bg-muted transition-colors text-left">
                     <Package className="size-4" /> Takeaway
                   </DialogTrigger>
                   <DialogCreateOrderTakeaway

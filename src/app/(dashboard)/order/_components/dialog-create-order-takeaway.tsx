@@ -1,8 +1,11 @@
+"use client"; // Pastikan ada use client di paling atas
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { createOrderTakeaway } from "../actions";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation"; // 1. Tambahkan ini
 import {
   OrderTakeawayForm,
   orderTakeawayFormSchema,
@@ -29,6 +32,7 @@ export default function DialogCreateOrderTakeaway({
 }: {
   closeDialog: () => void;
 }) {
+  const router = useRouter(); // 2. Inisialisasi router
   const form = useForm<OrderTakeawayForm>({
     resolver: zodResolver(orderTakeawayFormSchema),
     defaultValues: INITIAL_ORDER_TAKEAWAY,
@@ -51,16 +55,18 @@ export default function DialogCreateOrderTakeaway({
   useEffect(() => {
     if (createOrderState?.status === "error") {
       toast.error("Create Order Failed", {
+        id: "create-order-toast", // ID unik sama dengan dine-in tidak masalah
         description: createOrderState.errors?._form?.[0],
       });
     }
 
     if (createOrderState?.status === "success") {
-      toast.success("Create Order Success");
+      toast.success("Create Order Success", { id: "create-order-toast" }); // ID unik
       form.reset();
+      router.refresh();
       closeDialog();
     }
-  }, [createOrderState]);
+  }, [createOrderState, router, closeDialog, form]);
 
   return (
     <DialogContent className="sm:max-w-[425px] max-h-[90vh]">
@@ -80,9 +86,11 @@ export default function DialogCreateOrderTakeaway({
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline" type="button">
+                Cancel
+              </Button>
             </DialogClose>
-            <Button type="submit">
+            <Button type="submit" disabled={isPendingCreateOrder}>
               {isPendingCreateOrder ? (
                 <Loader2 className="animate-spin" />
               ) : (

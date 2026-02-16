@@ -79,6 +79,7 @@ export async function createOrder(
   };
 }
 
+// Ganti bagian createOrderTakeaway saja di actions.ts
 export async function createOrderTakeaway(
   prevState: OrderFormState,
   formData: FormData,
@@ -98,7 +99,6 @@ export async function createOrderTakeaway(
   }
 
   const supabase = await createClient();
-
   const orderId = `STARCAFE-${Date.now()}`;
 
   const { error } = await supabase.from("orders").insert({
@@ -117,8 +117,9 @@ export async function createOrderTakeaway(
     };
   }
 
-  revalidatePath("/order");
-  revalidatePath("/admin");
+  // PERBAIKAN: Tambahkan parameter "layout" agar semua data di path /order ditarik ulang
+  revalidatePath("/order", "layout");
+  revalidatePath("/admin", "layout");
 
   return {
     status: "success",
@@ -235,7 +236,7 @@ export async function updateStatusOrderitem(
 }
 
 export async function generatePayment(
-  prevState: any, // Gunakan any atau tipe spesifik State kamu
+  prevState: FormState,
   formData: FormData,
 ) {
   const supabase = await createClient();
@@ -247,47 +248,62 @@ export async function generatePayment(
     isProduction: false,
     serverKey: environment.MIDTRANS_SERVER_KEY!,
   });
-
   const parameter = {
     transaction_details: {
       order_id: `${orderId}`,
-      gross_amount: Math.round(parseFloat(grossAmount as string)), // Midtrans tidak suka desimal di gross_amount
+      gross_amount: parseFloat(grossAmount as string),
     },
     customer_details: {
-      first_name: customerName as string,
+      first_name: customerName,
     },
   };
 
-  try {
-    const result = await snap.createTransaction(parameter);
+  const result = await snap.createTransaction(parameter);
 
-    // Update token ke database
-    const { error: dbError } = await supabase
-      .from("orders")
-      .update({ payment_token: result.token })
-      .eq("order_id", orderId);
-
-    if (dbError) throw new Error(dbError.message);
-
-    // Update cache Next.js
-    revalidatePath(`/order/${orderId}`);
-
-    return {
-      status: "success",
-      data: {
-        payment_token: result.token,
-      },
-      errors: { _form: [] }, // Pastikan struktur error tetap ada agar tidak undefined di UI
-    };
-  } catch (error: any) {
+  if (result.error_messages) {
     return {
       status: "error",
       errors: {
-        _form: [error.message || "Failed to generate payment"],
+        ...prevState,
+        _form: [result.error_messages],
       },
       data: {
         payment_token: "",
       },
     };
+  }
+
+  await supabase
+    .from("orders")
+    .update({ payment_token: result.token })
+    .eq("order_id", orderId);
+
+  return {
+    status: "success",
+    data: {
+      payment_token: `${result.token}`,
+    },
+  };
+}
+
+// Tambahkan ini di actions.ts
+export async function getPaymentStatus(orderId: string) {
+  const snap = new midtrans.Snap({
+    isProduction: false,
+    serverKey: environment.MIDTRANS_SERVER_KEY!,
+  });
+
+  try {
+    // Meminta status transaksi ke Midtrans
+    const status = await snap.transaction.status(orderId);
+
+    // Ambil nomor VA (tiap bank punya struktur beda, ini cara ambil umumnya)
+    const vaNumber =
+      status.va_numbers?.[0]?.va_number || status.payment_code || null;
+    const bank = status.va_numbers?.[0]?.bank || "Payment Code";
+
+    return { vaNumber, bank, status: status.transaction_status };
+  } catch (error) {
+    return { vaNumber: null, bank: null, status: null };
   }
 }
