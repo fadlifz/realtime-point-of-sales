@@ -164,6 +164,7 @@ export default function OrderManagement() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       refetchOrders();
       refetchTables();
+      refetchActiveOrders();
     }
 
     if (
@@ -320,7 +321,17 @@ export default function OrderManagement() {
         </TabsContent>
 
         <TabsContent value="map">
-          <TableMap tables={tables || []} activeOrders={activeOrders?.data || []} />
+          <TableMap
+            tables={tables || []}
+            activeOrders={activeOrders?.data || []}
+            handleReservation={(
+              id: string,
+              table_id: string,
+              status: string,
+            ) => {
+              handleReservation({ id, table_id, status });
+            }}
+          />
         </TabsContent>
       </Tabs>
     </div>
