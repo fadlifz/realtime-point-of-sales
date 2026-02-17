@@ -6,7 +6,7 @@ import { HEADER_TABLE_DETAIL_ORDER } from "@/constants/order-constant";
 import useDataTable from "@/hooks/use-data-table";
 import { createClientSupabase } from "@/lib/supabase/default";
 import { cn, convertIDR } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import { startTransition, useActionState, useEffect, useMemo } from "react";
@@ -25,12 +25,13 @@ import { useAuthStore } from "@/stores/auth-store";
 import Receipt from "./receipt";
 
 export default function DetailOrder({ id }: { id: string }) {
-  const supabase = createClientSupabase();
+  const supabase = useMemo(() => createClientSupabase(), []);
+  const queryClient = useQueryClient();
   const { currentPage, currentLimit, handleChangePage, handleChangeLimit } =
     useDataTable();
   const profile = useAuthStore((state) => state.profile);
 
-  const { data: order } = useQuery({
+  const { data: order, refetch: refetchOrder } = useQuery({
     queryKey: ["order", id],
     queryFn: async () => {
       const result = await supabase
@@ -41,21 +42,42 @@ export default function DetailOrder({ id }: { id: string }) {
         .eq("order_id", id)
         .single();
 
-      if (result.error)
-        toast.error("Get Order data failed", {
-          description: result.error.message,
-        });
-
+      if (result.error) return null;
       return result.data;
     },
     enabled: !!id,
   });
 
+  const {
+    data: orderMenu,
+    isLoading: isLoadingOrderMenu,
+    refetch: refetchOrderMenu,
+  } = useQuery({
+    queryKey: ["orders_menu", id, currentPage, currentLimit],
+    queryFn: async () => {
+      const result = await supabase
+        .from("orders_menus")
+        .select("*, menus (id, name, image_url, price)", { count: "exact" })
+        .eq("order_id", order?.id)
+        .order("status");
+
+      if (result.error) return null;
+      return result;
+    },
+    enabled: !!order?.id,
+  });
+
+  // Fungsi refresh gabungan
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["order", id] });
+    queryClient.invalidateQueries({ queryKey: ["orders_menu", id] });
+  };
+
   useEffect(() => {
     if (!order?.id) return;
 
     const channel = supabase
-      .channel("change-order")
+      .channel(`order-sync-${id}`)
       .on(
         "postgres_changes",
         {
@@ -64,39 +86,25 @@ export default function DetailOrder({ id }: { id: string }) {
           table: "orders_menus",
           filter: `order_id=eq.${order.id}`,
         },
-        () => {
-          refetchOrderMenu();
-        },
+        () => refreshData(),
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `id=eq.${order.id}`,
+        },
+        () => refreshData(),
+      )
+      .on("broadcast", { event: "force_refresh" }, () => refreshData())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [order?.id]);
-
-  const {
-    data: orderMenu,
-    isLoading: isLoadingOrderMenu,
-    refetch: refetchOrderMenu,
-  } = useQuery({
-    queryKey: ["orders_menu", order?.id, currentPage, currentLimit],
-    queryFn: async () => {
-      const result = await supabase
-        .from("orders_menus")
-        .select("*, menus (id, name, image_url, price)", { count: "exact" })
-        .eq("order_id", order?.id)
-        .order("status");
-
-      if (result.error)
-        toast.error("Get order menu data failed", {
-          description: result.error.message,
-        });
-
-      return result;
-    },
-    enabled: !!order?.id,
-  });
+  }, [order?.id, id, supabase]);
 
   const [updateStatusOrderState, updateStatusOrderAction] = useActionState(
     updateStatusOrderitem,
@@ -114,6 +122,11 @@ export default function DetailOrder({ id }: { id: string }) {
 
     startTransition(() => {
       updateStatusOrderAction(formData);
+      // Kirim sinyal broadcast agar tab sebelah langsung refresh
+      supabase.channel(`order-sync-${id}`).send({
+        type: "broadcast",
+        event: "force_refresh",
+      });
     });
   };
 
@@ -133,7 +146,7 @@ export default function DetailOrder({ id }: { id: string }) {
     return (orderMenu?.data || []).map((item, index) => {
       return [
         currentLimit * (currentPage - 1) + index + 1,
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" key={item.id}>
           <Image
             src={item.menus.image_url}
             alt={item.menus.name}
@@ -148,8 +161,9 @@ export default function DetailOrder({ id }: { id: string }) {
             </span>
           </div>
         </div>,
-        <div>{convertIDR(item.nominal)}</div>,
+        <div key={`nominal-${item.id}`}>{convertIDR(item.nominal)}</div>,
         <div
+          key={`status-${item.id}`}
           className={cn("px-2 py-1 rounded-full text-white w-fit capitalize", {
             "bg-gray-500": item.status === "pending",
             "bg-yellow-500": item.status === "process",
@@ -159,7 +173,7 @@ export default function DetailOrder({ id }: { id: string }) {
         >
           {item.status}
         </div>,
-        <DropdownMenu>
+        <DropdownMenu key={`action-${item.id}`}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -196,26 +210,31 @@ export default function DetailOrder({ id }: { id: string }) {
         </DropdownMenu>,
       ];
     });
-  }, [orderMenu?.data]);
+  }, [orderMenu?.data, currentLimit, currentPage]);
 
   const totalPages = useMemo(() => {
     return orderMenu && orderMenu.count !== null
       ? Math.ceil(orderMenu.count / currentLimit)
       : 0;
-  }, [orderMenu]);
+  }, [orderMenu, currentLimit]);
 
   return (
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between gap-4 w-full">
-        <h1 className="text-2xl font-bold">Detail Order</h1>
-        {profile.role !== "kitchen" && order?.status === "process" && (
-          <Link href={`/order/${id}/add`}>
-            <Button>Add Order Item</Button>
-          </Link>
-        )}
-        {order?.status === "settled" && (
-          <Receipt order={order} orderMenu={orderMenu?.data} orderId={id} />
-        )}
+        <div className="flex flex-col">
+          <h1 className="text-2xl font-bold">Detail Order</h1>
+          <p className="text-sm text-muted-foreground">{id}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {profile.role !== "kitchen" && order?.status === "process" && (
+            <Link href={`/order/${id}/add`}>
+              <Button>Add Order Item</Button>
+            </Link>
+          )}
+          {order?.status === "settled" && (
+            <Receipt order={order} orderMenu={orderMenu?.data} orderId={id} />
+          )}
+        </div>
       </div>
       <div className="flex flex-col lg:flex-row gap-4 w-full">
         <div className="lg:w-2/3">
