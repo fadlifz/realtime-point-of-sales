@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { HoverCard, HoverCardContent } from "@/components/ui/hover-card";
@@ -7,9 +9,11 @@ import { HoverCardTrigger } from "@radix-ui/react-hover-card";
 import { Background, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, useEffect } from "react";
 import DialogCreateOrderDineIn from "./dialog-create-order-dine-in";
 import { useAuthStore } from "@/stores/auth-store";
+import { createClientSupabase } from "@/lib/supabase/default";
+import { useRouter } from "next/navigation";
 
 export function TableNode({
   data,
@@ -40,7 +44,7 @@ export function TableNode({
               "w-32 h-20": data.capacity === 4,
               "w-38 h-20": data.capacity === 6,
               "w-48 h-20": data.capacity === 8,
-              "w-64 h-20": data.capacity === 10,
+              "w-64 h-20": data.capacity >= 10,
             },
             {
               "outline-amber-600": data.status === "reserved",
@@ -67,7 +71,8 @@ export function TableNode({
               <p className="text-xs text-muted-foreground">
                 Customer : {data.order.customer_name}
               </p>
-              {data.status === "unavailable" ? (
+              {/* Tambah pengecekan data.order.order_id biar gak crash */}
+              {data.status === "unavailable" && data.order?.order_id ? (
                 <Link
                   className="mt-2 w-full"
                   href={`/order/${data.order.order_id}`}
@@ -146,9 +151,30 @@ export default function TableMap({
   }[];
   handleReservation: (id: string, table_id: string, status: string) => void;
 }) {
+  const supabase = createClientSupabase();
+  const router = useRouter();
+
   const nodeTypes = {
     tableNode: TableNode,
   };
+
+  // Sync Realtime status meja (agar warna outline langsung berubah pas bayar sukses)
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime-tables")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tables" },
+        () => {
+          router.refresh();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, router]);
 
   const initialNodes = useMemo(() => {
     return tables.map((table) => ({
@@ -166,7 +192,7 @@ export default function TableMap({
       },
       type: "tableNode",
     }));
-  }, [tables, activeOrders]);
+  }, [tables, activeOrders, handleReservation]);
 
   return (
     <div className="w-[100%] h-[80vh] border rounded-lg">
